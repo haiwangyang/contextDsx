@@ -1,0 +1,74 @@
+```{r library_import}
+library(DESeq2)
+library("pheatmap")
+library("RColorBrewer")
+library(knitr)
+```
+
+``` {r functions}
+# Make panel plot of pairwise similarities
+panel.cor <- function(x, y, digits=2, prefix="", cex.cor, ...) {
+    usr <- par("usr")
+    on.exit(par(usr))
+    par(usr = c(0, 1, 0, 1))
+    r <- abs(cor(x, y, use="complete.obs"))
+    txt <- format(c(r, 0.123456789), digits=digits)[1]
+    txt <- paste(prefix, txt, sep="")
+    if(missing(cex.cor)) cex.cor <- 0.8/strwidth(txt)
+    text(0.5, 0.5, txt, cex = cex.cor * (1 + r) / 2)
+}
+
+panel.hist <- function(x, ...) {
+    usr <- par("usr")
+    on.exit(par(usr))
+    par(usr = c(usr[1:2], 0, 1.5) )
+    h <- hist(x, plot = FALSE)
+    breaks <- h$breaks
+    nB <- length(breaks)
+    y <- h$counts
+    y <- y/max(y)
+    rect(breaks[-nB], 0, breaks[-1], y, col="white", ...)
+}
+
+panel.lm <- function (x, y, col = par("col"), bg = NA, pch = par("pch"),
+                      cex = 1, col.smooth = "red", ...) {
+    points(x, y, pch = pch, col = col, bg = bg, cex = cex)
+    abline(stats::lm(y ~ x), col = col.smooth, ...)
+}
+
+```
+
+```{r load data}
+colData = read.table("/Volumes/MrBig/contextDsx/contextDsx/list/sample.design", header=TRUE, sep='\t', row.names='sample_id')
+countData = read.table("/Volumes/MrBig/contextDsx/contextDsx/data/gene_level_read_matrix.txt", header=TRUE, sep='\t')
+row.names(countData) = countData$FBgn
+countData = countData[,-1]
+
+```
+
+
+```{r generate nrc and log-nrc}
+dds = DESeqDataSetFromMatrix(countData, colData, design=~tissue)
+dds = estimateSizeFactors(dds)
+normCounts = counts(dds, normalized=TRUE) # cal normalized read counts
+log2p1_normCounts = log2 (normCounts + 1)
+
+```
+
+
+```{r correlation scatterplot}
+png("/Volumes/MrBig/contextDsx/contextDsx/output/cor.scatterplots.png",width=4000,height=4000)
+pairs(log2p1_normCounts, pch=".", upper.panel = panel.cor, diag.panel = panel.hist, lower.panel = panel.lm)
+dev.off()
+
+```
+
+
+```{r differential expresssion test by DESeq2}
+# dds = DESeq(dds) # cal differential expression
+# res = results(dds)
+#   
+#   x = cbind(normCounts[order(row.names(normCounts)),], as.data.frame(res[order(row.names(res)),]))
+#   write.table(x, paste0("/Users/haiwang/run_deseq2/", strain, ".DESeq2.result.txt"), sep="\t", quote=FALSE)
+# }
+```
