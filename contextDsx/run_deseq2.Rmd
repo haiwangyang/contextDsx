@@ -36,6 +36,67 @@ panel.lm <- function (x, y, col = par("col"), bg = NA, pch = par("pch"),
     abline(stats::lm(y ~ x), col = col.smooth, ...)
 }
 
+
+
+compare_tempature_response_with_the_same_sex_tissue_genotype = function(countData_this, colData_this, sex, tissue, genotype, temperature1, temperature2, alpha=0.05) {
+  countData_this = countData
+  colData_this = colData
+  part_countData = countData_this[,names(countData_this)[grepl(paste(sex, tissue, genotype, sep="_"),names(countData_this)) & !grepl("m_re_mcherry_18_r1_D7",names(countData_this))]]
+  part_colData = colData_this[colnames(part_countData),]
+  part_colData$temperature = factor(part_colData$temperature, levels = c("18", "18to29", "29"))
+  
+  
+  part_colData = part_colData[part_colData$temperature == temperature1 | part_colData$temperature == temperature2 ,]
+  part_countData = part_countData[,row.names(part_colData)]
+  part_colData$temperature = factor(part_colData$temperature, levels = c(temperature1, temperature2))
+ 
+  # do deseq2
+  part_dds = DESeqDataSetFromMatrix(part_countData, part_colData, design=~temperature)
+  part_dds = estimateSizeFactors(part_dds)
+  part_dds = DESeq(part_dds)
+  resultsNames(part_dds)
+  part_res = results(part_dds)
+  summary(part_res,alpha=alpha)
+  
+  part_dds = estimateSizeFactors(part_dds)
+  part_normCounts = counts(part_dds, normalized=TRUE)
+  
+  part_res_sig = part_res[part_res$padj<alpha & !is.na(part_res$padj),]
+  part_res_sig_up = part_res_sig[part_res_sig$log2FoldChange>0,]
+  part_res_sig_down = part_res_sig[part_res_sig$log2FoldChange<0,]
+  FBgns_res_sig_up = rownames(part_res_sig_up)
+  FBgns_res_sig_down = rownames(part_res_sig_down)
+  
+  FBgns_all = rownames(part_res)
+  FBgns_all_minus_m = FBgns_all[! FBgns_all %in% FBgns_res_sig_up]
+  FBgns_unbiased = FBgns_all_minus_m[! FBgns_all_minus_m %in% FBgns_res_sig_down]
+  df_bias_m = data.frame("FBgn_ID"=as.character(unlist(FBgns_res_sig_up)),"bias"="up")
+  df_bias_unbias = data.frame("FBgn_ID"=FBgns_unbiased,"bias"="unbiased")
+  df_bias_f = data.frame("FBgn_ID"=as.character(unlist(FBgns_res_sig_down)),"bias"="down")
+  df_bias_total = rbind(df_bias_m,df_bias_unbias,df_bias_f)
+  df_bias_total$FBgn_ID = as.character(df_bias_total$FBgn_ID)
+  df_bias_total = df_bias_total[order(df_bias_total$FBgn_ID),]
+  
+  
+  x = log2(part_normCounts+1)
+  x = merge(x, part_res, by="row.names")
+  row.names(x) = x$Row.names 
+  x = x[,-1]
+  
+  x$bias = df_bias_total$bias
+  
+  
+  x$col = rgb(0,0,0,0.3)
+  x$col[x$bias == "down"] = rgb(1,0,1,0.6)
+  x$col[x$bias == "up"] = rgb(0,1,0,0.6)
+  x$MAplot_mean_R1 = (x[,1] + x[,2])/2
+  x$MAplot_log2FoldChange = x$log2FoldChange
+  
+  return(x)
+}
+
+
+
 ```
 
 ```{r load data}
@@ -57,18 +118,36 @@ log2p1_normCounts = log2 (normCounts + 1)
 
 
 ```{r correlation scatterplot}
-png("/Volumes/MrBig/contextDsx/contextDsx/output/cor.scatterplots.png",width=4000,height=4000)
+png("/Volumes/MrBig/contextDsx/contextDsx/output/cor.scatterplots.png",width=10000,height=10000)
 pairs(log2p1_normCounts, pch=".", upper.panel = panel.cor, diag.panel = panel.hist, lower.panel = panel.lm)
 dev.off()
 
 ```
 
 
-```{r differential expresssion test by DESeq2}
-# dds = DESeq(dds) # cal differential expression
-# res = results(dds)
-#   
-#   x = cbind(normCounts[order(row.names(normCounts)),], as.data.frame(res[order(row.names(res)),]))
+```{r test differential expresssion test by DESeq2}
+
+
+
+dds = DESeq(dds) # cal differential expression
+res = results(dds)
+
+A = compare_tempature_response_with_the_same_sex_tissue_genotype(countData, colData, "f", "tx", "traRNAi", "18", "18to29", alpha=0.05)
+
+B = compare_tempature_response_with_the_same_sex_tissue_genotype(countData, colData, "f", "tx", "traRNAi", "18", "29", alpha=0.05)
+
+
+A = compare_tempature_response_with_the_same_sex_tissue_genotype(countData, colData, "f", "tx", "mcherry", "18", "18to29", alpha=0.05)
+
+B = compare_tempature_response_with_the_same_sex_tissue_genotype(countData, colData, "f", "tx", "mcherry", "18", "29", alpha=0.05)
+
+
+A = compare_tempature_response_with_the_same_sex_tissue_genotype(countData, colData, "m", "re", "traF", "18", "18to29", alpha=0.05)
+
+B = compare_tempature_response_with_the_same_sex_tissue_genotype(countData, colData, "m", "re", "traF", "18", "29", alpha=0.05)
+
+
+x = cbind(normCounts[order(row.names(normCounts)),], as.data.frame(res[order(row.names(res)),]))
 #   write.table(x, paste0("/Users/haiwang/run_deseq2/", strain, ".DESeq2.result.txt"), sep="\t", quote=FALSE)
 # }
 ```
