@@ -25,11 +25,14 @@ sbatch --mem=100g --time=24:00:00 collect_rna_seq_metrics.sh $s
 done
 
 # Differential Expression Analyses
-* generate gene-level raw read count matrix (for DESeq2)
+* generate gene-level raw read count matrix (for DESeq2) [to do]
+./generate_gene_level_read_matrix_for_DESeq2.sh
 
-* generate experiment design table (for DESeq2)
 
-* run DESeq2
+* generate experiment design table (for DESeq2) [done]
+./generate_experiment_design_for_DESeq2.sh
+
+* run DESeq2 [to do]
 
 # 
 gtfToGenePred
