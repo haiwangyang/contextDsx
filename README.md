@@ -1,10 +1,19 @@
 # contextDsx
 test if context dependent sex-biased expression is driven by dsx
 
-# RNA-seq reads mapping
+# index genome
+
+
+# gene-level mapping
 * map RNA-seq reads and generate gene-level read counts (hisat2 + htseq)
 for s in `cat list/sample.txt`; do
 sbatch --cpus-per-task=4 --mem=20g --time=99:00:00 hisat2.sh ${s}
+done
+
+# ERCC-level mapping
+* map RNA-seq reads and generate ERCC-level read counts (hisat2 + htseq)
+for s in `cat list/sample.txt`; do
+sbatch --cpus-per-task=4 --mem=20g --time=99:00:00 hisat2_ERCC.sh ${s}
 done
 
 # Mapping Evaluation (picard CollectRnaSeqMetrics)
