@@ -5,6 +5,18 @@ library("RColorBrewer")
 library(knitr)
 ```
 
+```{r variables}
+base_path = "/Volumes/MrBig/contextDsx/contextDsx/"
+sorted_tissues = c("tx", "re")
+sorted_sexes = c("m", "f")
+sorted_genotypes = c("mcherry", "traRNAi", "traF")
+sorted_temperatures = c("18", "18to29", "29")
+FBgn2symbol = read.table(paste0(base_path, "annotation/dmel.FBgn2symbol"), sep="\t", quote="")
+names(FBgn2symbol) = c("FBgn", "symbol")
+row.names(FBgn2symbol) = FBgn2symbol$FBgn
+
+```
+
 ``` {r functions}
 # Make panel plot of pairwise similarities
 panel.cor <- function(x, y, digits=2, prefix="", cex.cor, ...) {
@@ -39,8 +51,6 @@ panel.lm <- function (x, y, col = par("col"), bg = NA, pch = par("pch"),
 
 
 compare_tempature_response_with_the_same_sex_tissue_genotype = function(countData_this, colData_this, sex, tissue, genotype, temperature1, temperature2, alpha=0.05) {
-  countData_this = countData
-  colData_this = colData
   part_countData = countData_this[,names(countData_this)[grepl(paste(sex, tissue, genotype, sep="_"),names(countData_this)) & !grepl("m_re_mcherry_18_r1_D7",names(countData_this))]]
   part_colData = colData_this[colnames(part_countData),]
   part_colData$temperature = factor(part_colData$temperature, levels = c("18", "18to29", "29"))
@@ -91,10 +101,132 @@ compare_tempature_response_with_the_same_sex_tissue_genotype = function(countDat
   x$col[x$bias == "up"] = rgb(0,1,0,0.6)
   x$MAplot_mean_R1 = (x[,1] + x[,2])/2
   x$MAplot_log2FoldChange = x$log2FoldChange
-  
+  x$MAplot_log2FoldChange[is.na(x$MAplot_log2FoldChange)] = 0
+  x$MAplot_log2FoldChange[x$MAplot_log2FoldChange > 2] = 2
+  x$MAplot_log2FoldChange[x$MAplot_log2FoldChange < -2] = -2
   return(x)
 }
 
+
+
+compare_sexual_difference_with_the_same_tissue_genotype_and_temperature = function(countData_this, colData_this, tissue, genotype, temperature, alpha=0.05) {
+  #countData_this = countData
+  #colData_this = colData
+  part_countData = countData_this[,names(countData_this)[grepl(paste(tissue, "_", genotype, "_", temperature, "_",  sep=""),names(countData_this)) & !grepl("m_re_mcherry_18_r1_D7",names(countData_this))]]
+  part_colData = colData_this[colnames(part_countData),]
+  
+  part_colData$sex = factor(part_colData$sex, levels = c("f", "m"))
+  
+  # do deseq2
+  part_dds = DESeqDataSetFromMatrix(part_countData, part_colData, design=~sex)
+  part_dds = estimateSizeFactors(part_dds)
+  part_dds = DESeq(part_dds)
+  resultsNames(part_dds)
+  part_res = results(part_dds)
+  summary(part_res,alpha=alpha)
+  
+  part_dds = estimateSizeFactors(part_dds)
+  part_normCounts = counts(part_dds, normalized=TRUE)
+  
+  part_res_sig = part_res[part_res$padj<alpha & !is.na(part_res$padj),]
+  part_res_sig_up = part_res_sig[part_res_sig$log2FoldChange>0,]
+  part_res_sig_down = part_res_sig[part_res_sig$log2FoldChange<0,]
+  FBgns_res_sig_up = rownames(part_res_sig_up)
+  FBgns_res_sig_down = rownames(part_res_sig_down)
+  
+  FBgns_all = rownames(part_res)
+  FBgns_all_minus_m = FBgns_all[! FBgns_all %in% FBgns_res_sig_up]
+  FBgns_unbiased = FBgns_all_minus_m[! FBgns_all_minus_m %in% FBgns_res_sig_down]
+  df_bias_m = data.frame("FBgn_ID"=as.character(unlist(FBgns_res_sig_up)),"bias"="male")
+  df_bias_unbias = data.frame("FBgn_ID"=FBgns_unbiased,"bias"="unbiased")
+  df_bias_f = data.frame("FBgn_ID"=as.character(unlist(FBgns_res_sig_down)),"bias"="female")
+  df_bias_total = rbind(df_bias_m,df_bias_unbias,df_bias_f)
+  df_bias_total$FBgn_ID = as.character(df_bias_total$FBgn_ID)
+  df_bias_total = df_bias_total[order(df_bias_total$FBgn_ID),]
+  
+  
+  x = log2(part_normCounts+1)
+  x = merge(x, part_res, by="row.names")
+  row.names(x) = x$Row.names 
+  x = x[,-1]
+  
+  x$bias = df_bias_total$bias
+  
+  
+  x$col = rgb(0,0,0,0.3)
+  x$col[x$bias == "male"] = rgb(0,0,1,0.6)
+  x$col[x$bias == "female"] = rgb(1,0,0,0.6)
+  x$MAplot_mean_R1 = (x[,1] + x[,2])/2
+  x$MAplot_log2FoldChange = x$log2FoldChange
+  x$MAplot_log2FoldChange[is.na(x$MAplot_log2FoldChange)] = 0
+  x$MAplot_log2FoldChange[x$MAplot_log2FoldChange > 2] = 2
+  x$MAplot_log2FoldChange[x$MAplot_log2FoldChange < -2] = -2
+  return(x)
+}
+
+
+compare_genotype_difference_with_the_same_sex_tissue_and_temperature = function(countData_this, colData_this, sex, tissue, temperature, genotype1, genotype2, alpha=0.05) {
+  # countData_this = countData
+  # colData_this = colData
+  # sex = "f"
+  # tissue = "tx"
+  # temperature = "18"
+  # genotype1 = "mcherry"
+  # genotype2 = "traRNAi"
+  part_countData = countData_this[,names(countData_this)[grepl(paste(sex, "_", tissue, "_", sep=""),names(countData_this))
+    & grepl(paste("_", temperature, "_", sep=""),names(countData_this))
+    & !grepl("m_re_mcherry_18_r1_D7",names(countData_this))
+    ]]
+  part_colData = colData_this[colnames(part_countData),]
+  
+  part_colData$genotype = factor(part_colData$genotype, levels = c(genotype1, genotype2))
+  
+  # do deseq2
+  part_dds = DESeqDataSetFromMatrix(part_countData, part_colData, design=~genotype)
+  part_dds = estimateSizeFactors(part_dds)
+  part_dds = DESeq(part_dds)
+  resultsNames(part_dds)
+  part_res = results(part_dds)
+  summary(part_res,alpha=alpha)
+  
+  part_dds = estimateSizeFactors(part_dds)
+  part_normCounts = counts(part_dds, normalized=TRUE)
+  
+  part_res_sig = part_res[part_res$padj<alpha & !is.na(part_res$padj),]
+  part_res_sig_up = part_res_sig[part_res_sig$log2FoldChange>0,]
+  part_res_sig_down = part_res_sig[part_res_sig$log2FoldChange<0,]
+  FBgns_res_sig_up = rownames(part_res_sig_up)
+  FBgns_res_sig_down = rownames(part_res_sig_down)
+  
+  FBgns_all = rownames(part_res)
+  FBgns_all_minus_m = FBgns_all[! FBgns_all %in% FBgns_res_sig_up]
+  FBgns_unbiased = FBgns_all_minus_m[! FBgns_all_minus_m %in% FBgns_res_sig_down]
+  df_bias_m = data.frame("FBgn_ID"=as.character(unlist(FBgns_res_sig_up)),"bias"="up")
+  df_bias_unbias = data.frame("FBgn_ID"=FBgns_unbiased,"bias"="unbiased")
+  df_bias_f = data.frame("FBgn_ID"=as.character(unlist(FBgns_res_sig_down)),"bias"="down")
+  df_bias_total = rbind(df_bias_m,df_bias_unbias,df_bias_f)
+  df_bias_total$FBgn_ID = as.character(df_bias_total$FBgn_ID)
+  df_bias_total = df_bias_total[order(df_bias_total$FBgn_ID),]
+  
+  
+  x = log2(part_normCounts+1)
+  x = merge(x, part_res, by="row.names")
+  row.names(x) = x$Row.names 
+  x = x[,-1]
+  
+  x$bias = df_bias_total$bias
+  
+  
+  x$col = rgb(0,0,0,0.3)
+  x$col[x$bias == "up"] = rgb(0,1,0,0.6)
+  x$col[x$bias == "down"] = rgb(1,0,1,0.6)
+  x$MAplot_mean_R1 = (x[,1] + x[,2])/2
+  x$MAplot_log2FoldChange = x$log2FoldChange
+  x$MAplot_log2FoldChange[is.na(x$MAplot_log2FoldChange)] = 0
+  x$MAplot_log2FoldChange[x$MAplot_log2FoldChange > 2] = 2
+  x$MAplot_log2FoldChange[x$MAplot_log2FoldChange < -2] = -2
+  return(x)
+}
 
 
 ```
@@ -124,11 +256,84 @@ dev.off()
 
 ```
 
+```{r generate sex-biased MAplots for mcherry samples at three temperatures}
+for (tissue in sorted_tissues){
+  for (temperature in sorted_temperatures){
+    x = compare_sexual_difference_with_the_same_tissue_genotype_and_temperature(countData, colData, tissue, "mcherry", temperature, alpha=0.05)
+    f = as.numeric(table(x$bias)['female'])
+    m = as.numeric(table(x$bias)['male'])
+    u = as.numeric(table(x$bias)['unbiased'])
+    
+    pdf(paste0(base_path, "output/MAplot.sex.response.mcherry.",  tissue, ".", temperature, ".pdf"),width=5,height=5,useDingbats=FALSE)
+    plot(x$MAplot_mean_R1, x$MAplot_log2FoldChange, col = x$col, xlab="mean expression (log2)", ylab="log2 fold change (male/female)")
+    text(labels = m, 15, 1, col=rgb(0, 0, 1))
+    text(labels = f, 15, -1, col=rgb(1, 0, 0))
+    dev.off()
+  }
+}
+
+```
+
+```{r fetch context dependent expressed genes from mcherry}
+for (temperature in sorted_temperatures){
+  tx = compare_sexual_difference_with_the_same_tissue_genotype_and_temperature(countData, colData, "tx", "mcherry", temperature, alpha=0.05)
+  re = compare_sexual_difference_with_the_same_tissue_genotype_and_temperature(countData, colData, "re", "mcherry", temperature, alpha=0.05)
+  
+  colnames(tx) = c(colnames(tx)[grepl("tx", colnames(tx))], paste0(colnames(tx)[!grepl("tx", colnames(tx))], ".tx"))
+  colnames(re) = c(colnames(re)[grepl("re", colnames(re))], paste0(colnames(re)[!grepl("re", colnames(re))], ".re"))
+  cmp = cbind(tx, re)
+  #cmp = data.frame(row.names = row.names(tx), tx = tx$bias, re = re$bias) 
+  
+  context = cmp[(cmp$bias.tx == "male" & cmp$bias.re == "female") | (cmp$bias.tx == "female" & cmp$bias.re == "male") ,]
+  
+  context_FBgns = as.character(row.names(context))
+  
+  cmp$context = 0
+  cmp[as.character(row.names(context)),]$context = 1
+  cmp = merge(FBgn2symbol, cmp, by="row.names")
+  cmp = cmp[,-1]
+  
+  write.table(cmp, paste0(base_path, "output/sex.response.table.", temperature, ".context.txt"), sep="\t", row.names=FALSE, quote=FALSE)
+  
+}
+```
+
+
+```{r generate genotype response MAplots, i.e., traRNAi vs mcherry under female, tx, 18to29}
+for (tissue in sorted_tissues){
+  for (temperature in sorted_temperatures){
+    sex = "f"
+    x = compare_genotype_difference_with_the_same_sex_tissue_and_temperature(countData, colData, sex, tissue, temperature, "mcherry", "traRNAi", alpha=0.05) 
+    up = as.numeric(table(x$bias)['up'])
+    down = as.numeric(table(x$bias)['down'])
+    unbiased = as.numeric(table(x$bias)['unbiased'])
+    
+    pdf(paste0(base_path, "output/MAplot.genotype.response.traRNAi.",  sex, ".", tissue, ".", temperature, ".pdf"),width=5,height=5,useDingbats=FALSE)
+    plot(x$MAplot_mean_R1, x$MAplot_log2FoldChange, col = x$col, xlab="mean expression (log2)", ylab="log2 fold change (traRNAi/mCherry)")
+    text(labels = up, 15, 1, col=rgb(0,1,0,0.6))
+    text(labels = down, 15, -1, col=rgb(1,0,1,0.6))
+    dev.off()
+    
+    
+    sex = "m"
+    x = compare_genotype_difference_with_the_same_sex_tissue_and_temperature(countData, colData, sex, tissue, temperature, "mcherry", "traF", alpha=0.05) 
+    up = as.numeric(table(x$bias)['up'])
+    down = as.numeric(table(x$bias)['down'])
+    unbiased = as.numeric(table(x$bias)['unbiased'])
+    
+    pdf(paste0(base_path, "output/MAplot.genotype.response.traF.",  sex, ".", tissue, ".", temperature, ".pdf"),width=5,height=5,useDingbats=FALSE)
+    plot(x$MAplot_mean_R1, x$MAplot_log2FoldChange, col = x$col, xlab="mean expression (log2)", ylab="log2 fold change (traF/mCherry)")
+    text(labels = up, 15, 1, col=rgb(0,1,0,0.6))
+    text(labels = down, 15, -1, col=rgb(1,0,1,0.6))
+    dev.off()
+    
+  }
+}
+
+```
+
 
 ```{r test differential expresssion test by DESeq2}
-
-
-
 dds = DESeq(dds) # cal differential expression
 res = results(dds)
 
